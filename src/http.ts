@@ -26,10 +26,13 @@ export interface RequestOptions<T = unknown> {
 export async function request<T>(opts: RequestOptions<T>): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${opts.apiKey}`,
-    "Content-Type": "application/json",
     Accept: "application/json",
     ...opts.headers,
   };
+
+  if (opts.body !== undefined && headers["Content-Type"] === undefined) {
+    headers["Content-Type"] = "application/json";
+  }
 
   let response: Response;
   try {
@@ -58,7 +61,10 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
   // non-JSON body (e.g. HTML error pages from proxies).
   let json: unknown;
   const contentType = response.headers.get("content-type") ?? "";
-  if (response.status !== 204 && contentType.includes("application/json")) {
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  const isJsonResponse =
+    mediaType === "application/json" || mediaType.endsWith("+json");
+  if (response.status !== 204 && isJsonResponse) {
     try {
       json = await response.json();
     } catch (err) {
@@ -98,6 +104,16 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
         cause: err,
       });
     }
+  }
+
+  if (json === undefined) {
+    throw new CountrError(
+      `Expected a JSON response body (status ${response.status}).`,
+      {
+        statusCode: response.status,
+        code: "invalid_response",
+      },
+    );
   }
 
   return json as T;

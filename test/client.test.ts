@@ -187,6 +187,25 @@ describe("checkConsume", () => {
     });
   });
 
+  it("parses application/problem+json error bodies", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: makeHeaders("application/problem+json"),
+      json: () =>
+        Promise.resolve({ message: "Too many requests", code: "rate_limited" }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({
+      name: "CountrError",
+      statusCode: 429,
+      code: "rate_limited",
+      message: "Too many requests",
+    });
+  });
+
   it("throws CountrError with default message for non-2xx empty body", async () => {
     mockFetch.mockResolvedValue({
       ok: false,
@@ -315,6 +334,27 @@ describe("getUsage", () => {
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer ck_test");
+  });
+
+  it("does not send Content-Type header on GET requests", async () => {
+    await client.getUsage({ subject: "user_1", metric: "api_calls" });
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBeUndefined();
+  });
+
+  it("throws CountrError when 2xx response has non-JSON content type", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders("text/plain"),
+      json: () => Promise.resolve(usageBody),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
   });
 
   it("throws CountrError on invalid input – missing metric", async () => {
