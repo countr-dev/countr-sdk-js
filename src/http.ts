@@ -56,7 +56,7 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
   // and has a body (i.e. is not a 204 No Content). This prevents spurious
   // "invalid_response" errors when the API or a gateway returns an empty or
   // non-JSON body (e.g. HTML error pages from proxies).
-  let json: unknown = null;
+  let json: unknown;
   const contentType = response.headers.get("content-type") ?? "";
   if (response.status !== 204 && contentType.includes("application/json")) {
     try {

@@ -31,13 +31,13 @@ function validateCheckConsumeResponse(data: unknown): CheckConsumeResponse {
 }
 
 function validateGetUsageResponse(data: unknown): GetUsageResponse {
-  const d = data as Record<string, unknown>;
+  const record = data as Record<string, unknown>;
   if (
     typeof data !== "object" ||
     data === null ||
-    typeof d.subject !== "string" ||
-    typeof d.metric !== "string" ||
-    typeof d.current !== "number"
+    typeof record.subject !== "string" ||
+    typeof record.metric !== "string" ||
+    typeof record.current !== "number"
   ) {
     throw new CountrError(
       "Unexpected response shape from /v1/usage.",
