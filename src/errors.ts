@@ -22,8 +22,6 @@ export class CountrError extends Error {
    * May be returned by the API or set by the SDK itself.
    */
   readonly code: string | undefined;
-  /** The underlying cause of this error, if any. */
-  readonly cause: unknown;
 
   constructor(
     message: string,
@@ -33,11 +31,10 @@ export class CountrError extends Error {
       cause?: unknown;
     },
   ) {
-    super(message);
+    super(message, { cause: options?.cause });
     this.name = "CountrError";
     this.statusCode = options?.statusCode;
     this.code = options?.code;
-    this.cause = options?.cause;
 
     // Maintain proper prototype chain in environments that transpile classes.
     Object.setPrototypeOf(this, new.target.prototype);

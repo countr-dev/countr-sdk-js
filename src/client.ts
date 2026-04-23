@@ -16,11 +16,22 @@ const DEFAULT_BASE_URL = "https://api.countr.dev";
 // Runtime response validators
 // ---------------------------------------------------------------------------
 
+function isNumberOrNull(v: unknown): v is number | null {
+  return v === null || typeof v === "number";
+}
+
+function isStringOrNull(v: unknown): v is string | null {
+  return v === null || typeof v === "string";
+}
+
 function validateCheckConsumeResponse(data: unknown): CheckConsumeResponse {
+  const r = data as Record<string, unknown>;
   if (
     typeof data !== "object" ||
     data === null ||
-    typeof (data as Record<string, unknown>).allowed !== "boolean"
+    typeof r.allowed !== "boolean" ||
+    !isNumberOrNull(r.remaining) ||
+    !isStringOrNull(r.reason)
   ) {
     throw new CountrError(
       "Unexpected response shape from /v1/check-consume.",
@@ -30,14 +41,19 @@ function validateCheckConsumeResponse(data: unknown): CheckConsumeResponse {
   return data as CheckConsumeResponse;
 }
 
+const VALID_WINDOWS = new Set<unknown>(["none", "day", "month"]);
+
 function validateGetUsageResponse(data: unknown): GetUsageResponse {
-  const record = data as Record<string, unknown>;
+  const r = data as Record<string, unknown>;
   if (
     typeof data !== "object" ||
     data === null ||
-    typeof record.subject !== "string" ||
-    typeof record.metric !== "string" ||
-    typeof record.current !== "number"
+    typeof r.subject !== "string" ||
+    typeof r.metric !== "string" ||
+    typeof r.current !== "number" ||
+    !isNumberOrNull(r.limit) ||
+    !isNumberOrNull(r.remaining) ||
+    !VALID_WINDOWS.has(r.window)
   ) {
     throw new CountrError(
       "Unexpected response shape from /v1/usage.",
@@ -73,7 +89,7 @@ export class CountrClient {
     if (typeof fetchImpl !== "function") {
       throw new CountrError(
         "No fetch implementation found. " +
-          "Please upgrade to Node.js 18+ or pass a custom fetch via `config.fetch`.",
+          "Please upgrade to Node.js 20+ or pass a custom fetch via `config.fetch`.",
         { code: "missing_fetch" },
       );
     }

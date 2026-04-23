@@ -213,6 +213,34 @@ describe("checkConsume", () => {
     ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
   });
 
+  it("throws CountrError when `remaining` is wrong type", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ allowed: true, remaining: "a lot", reason: null }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("throws CountrError when `reason` is wrong type", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ allowed: true, remaining: 99, reason: 42 }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
   it("throws CountrError on network failure", async () => {
     mockFetch.mockRejectedValue(new Error("Network failure"));
 
@@ -319,6 +347,48 @@ describe("getUsage", () => {
       status: 200,
       headers: makeHeaders(),
       json: () => Promise.resolve({ subject: "user_1" }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("throws CountrError when `window` is invalid value", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({
+          subject: "user_1",
+          metric: "api_calls",
+          current: 5,
+          limit: 100,
+          remaining: 95,
+          window: "week",
+        }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("throws CountrError when `limit` is wrong type", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({
+          subject: "user_1",
+          metric: "api_calls",
+          current: 5,
+          limit: "unlimited",
+          remaining: 95,
+          window: "day",
+        }),
     });
 
     await expect(
