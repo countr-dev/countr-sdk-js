@@ -56,6 +56,46 @@ describe("CountrClient construction", () => {
     expect(client).toBeInstanceOf(CountrClient);
   });
 
+  it("throws if baseUrl is an empty string", () => {
+    expect(
+      () =>
+        new CountrClient({
+          apiKey: "ck_test",
+          baseUrl: "",
+          fetch: makeFetch(200, {}),
+        }),
+    ).toThrow(CountrError);
+  });
+
+  it("throws if baseUrl is a whitespace-only string", () => {
+    expect(
+      () =>
+        new CountrClient({
+          apiKey: "ck_test",
+          baseUrl: "   ",
+          fetch: makeFetch(200, {}),
+        }),
+    ).toThrow(CountrError);
+  });
+
+  it("trims leading/trailing whitespace from baseUrl", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ allowed: true, remaining: null, reason: null }),
+    });
+    const client = new CountrClient({
+      apiKey: "ck_test",
+      baseUrl: "  http://localhost:3000  ",
+      fetch: mockFetch as unknown as typeof globalThis.fetch,
+    });
+    await client.checkConsume({ subject: "user_1", metric: "calls", cost: 1 });
+    const [url] = mockFetch.mock.calls[0] as [string];
+    expect(url).toBe("http://localhost:3000/v1/check-consume");
+  });
+
   it("strips multiple trailing slashes from baseUrl", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

@@ -94,8 +94,20 @@ export class CountrClient {
       );
     }
 
+    if (config.baseUrl !== undefined) {
+      if (typeof config.baseUrl !== "string" || !config.baseUrl.trim()) {
+        throw new CountrError(
+          "config.baseUrl must be a non-empty string when provided.",
+          { code: "invalid_config" },
+        );
+      }
+    }
+
     this.apiKey = config.apiKey;
-    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    this.baseUrl = (config.baseUrl?.trim() ?? DEFAULT_BASE_URL).replace(
+      /\/+$/,
+      "",
+    );
     this.fetchImpl = fetchImpl;
   }
 
