@@ -212,6 +212,54 @@ describe("checkConsume", () => {
     ).rejects.toThrow(CountrError);
   });
 
+  it("throws CountrError on invalid input – whitespace-only subject", async () => {
+    await expect(
+      client.checkConsume({ subject: "   ", metric: "api_calls", cost: 1 }),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid input – whitespace-only metric", async () => {
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "   ", cost: 1 }),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid input – null input", async () => {
+    await expect(
+      // @ts-expect-error testing JS null input
+      client.checkConsume(null),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid idempotencyKey – empty string", async () => {
+    await expect(
+      client.checkConsume(
+        { subject: "user_1", metric: "api_calls", cost: 1 },
+        { idempotencyKey: "" },
+      ),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid idempotencyKey – whitespace-only", async () => {
+    await expect(
+      client.checkConsume(
+        { subject: "user_1", metric: "api_calls", cost: 1 },
+        { idempotencyKey: "   " },
+      ),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("trims idempotencyKey before sending", async () => {
+    await client.checkConsume(
+      { subject: "user_1", metric: "api_calls", cost: 1 },
+      { idempotencyKey: "  idem-abc  " },
+    );
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Idempotency-Key"]).toBe("idem-abc");
+  });
+
   it("throws CountrError on invalid input – negative cost", async () => {
     await expect(
       client.checkConsume({ subject: "user_1", metric: "api_calls", cost: -5 }),
@@ -458,6 +506,25 @@ describe("getUsage", () => {
   it("throws CountrError on invalid input – missing metric", async () => {
     await expect(
       client.getUsage({ subject: "user_1", metric: "" }),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid input – whitespace-only subject", async () => {
+    await expect(
+      client.getUsage({ subject: "   ", metric: "api_calls" }),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid input – whitespace-only metric", async () => {
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "   " }),
+    ).rejects.toThrow(CountrError);
+  });
+
+  it("throws CountrError on invalid input – null input", async () => {
+    await expect(
+      // @ts-expect-error testing JS null input
+      client.getUsage(null),
     ).rejects.toThrow(CountrError);
   });
 

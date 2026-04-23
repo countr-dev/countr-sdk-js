@@ -138,8 +138,17 @@ export class CountrClient {
     this.validateCheckConsumeInput(input);
 
     const extraHeaders: Record<string, string> = {};
-    if (options?.idempotencyKey) {
-      extraHeaders["Idempotency-Key"] = options.idempotencyKey;
+    if (options?.idempotencyKey !== undefined) {
+      if (
+        typeof options.idempotencyKey !== "string" ||
+        !options.idempotencyKey.trim()
+      ) {
+        throw new CountrError(
+          "`idempotencyKey` must be a non-empty string when provided.",
+          { code: "invalid_input" },
+        );
+      }
+      extraHeaders["Idempotency-Key"] = options.idempotencyKey.trim();
     }
 
     return request<CheckConsumeResponse>({
@@ -201,12 +210,25 @@ export class CountrClient {
   // ---------------------------------------------------------------------------
 
   private validateCheckConsumeInput(input: CheckConsumeInput): void {
-    if (!input.subject || typeof input.subject !== "string") {
+    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+      throw new CountrError("`input` must be a non-null object.", {
+        code: "invalid_input",
+      });
+    }
+    if (
+      !input.subject ||
+      typeof input.subject !== "string" ||
+      !input.subject.trim()
+    ) {
       throw new CountrError("`subject` must be a non-empty string.", {
         code: "invalid_input",
       });
     }
-    if (!input.metric || typeof input.metric !== "string") {
+    if (
+      !input.metric ||
+      typeof input.metric !== "string" ||
+      !input.metric.trim()
+    ) {
       throw new CountrError("`metric` must be a non-empty string.", {
         code: "invalid_input",
       });
@@ -219,12 +241,25 @@ export class CountrClient {
   }
 
   private validateGetUsageInput(input: GetUsageInput): void {
-    if (!input.subject || typeof input.subject !== "string") {
+    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+      throw new CountrError("`input` must be a non-null object.", {
+        code: "invalid_input",
+      });
+    }
+    if (
+      !input.subject ||
+      typeof input.subject !== "string" ||
+      !input.subject.trim()
+    ) {
       throw new CountrError("`subject` must be a non-empty string.", {
         code: "invalid_input",
       });
     }
-    if (!input.metric || typeof input.metric !== "string") {
+    if (
+      !input.metric ||
+      typeof input.metric !== "string" ||
+      !input.metric.trim()
+    ) {
       throw new CountrError("`metric` must be a non-empty string.", {
         code: "invalid_input",
       });
