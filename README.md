@@ -25,7 +25,7 @@ pnpm add @countr/sdk
 yarn add @countr/sdk
 ```
 
-**Requires Node.js 20+** (uses the built-in `fetch` API).
+**Requires Node.js 20.19.0+** (uses the built-in `fetch` API).
 
 ---
 
@@ -225,7 +225,7 @@ This SDK is designed for **server-side** use cases:
 - Edge functions (Vercel Edge, Cloudflare Workers — ensure `fetch` is available)
 - Other serverless runtimes
 
-It relies on `fetch` being available globally (Node.js 20+) or passed explicitly via `config.fetch`.
+It relies on `fetch` being available globally (Node.js 20.19.0+) or passed explicitly via `config.fetch`.
 
 ---
 
