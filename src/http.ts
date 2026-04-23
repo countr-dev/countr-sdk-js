@@ -108,7 +108,7 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
           throw new CountrError(err.message, {
             statusCode: response.status,
             code: err.code,
-            cause: err.cause,
+            cause: err,
           });
         }
         throw err;
