@@ -1,7 +1,7 @@
 import { CountrError } from "./errors.js";
 
 /** @internal */
-export interface RequestOptions {
+export interface RequestOptions<T = unknown> {
   method: "GET" | "POST";
   url: string;
   apiKey: string;
@@ -9,15 +9,21 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   fetchImpl: typeof globalThis.fetch;
+  /**
+   * Optional runtime validator called with the parsed response body on
+   * success. Should throw a `CountrError` if the shape is unexpected.
+   */
+  validate?: (data: unknown) => T;
 }
 
 /**
  * Executes an HTTP request and returns the parsed JSON response.
- * Throws a `CountrError` for non-2xx responses or JSON parse failures.
+ * Throws a `CountrError` for non-2xx responses, JSON parse failures, or
+ * responses that fail the optional `validate` check.
  *
  * @internal
  */
-export async function request<T>(opts: RequestOptions): Promise<T> {
+export async function request<T>(opts: RequestOptions<T>): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${opts.apiKey}`,
     "Content-Type": "application/json",
@@ -46,18 +52,25 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     });
   }
 
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch (err) {
-    throw new CountrError(
-      `Failed to parse API response (status ${response.status}).`,
-      {
-        statusCode: response.status,
-        code: "invalid_response",
-        cause: err,
-      },
-    );
+  // Only attempt JSON parsing when the response carries a JSON content type
+  // and has a body (i.e. is not a 204 No Content). This prevents spurious
+  // "invalid_response" errors when the API or a gateway returns an empty or
+  // non-JSON body (e.g. HTML error pages from proxies).
+  let json: unknown = null;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (response.status !== 204 && contentType.includes("application/json")) {
+    try {
+      json = await response.json();
+    } catch (err) {
+      throw new CountrError(
+        `Failed to parse API response (status ${response.status}).`,
+        {
+          statusCode: response.status,
+          code: "invalid_response",
+          cause: err,
+        },
+      );
+    }
   }
 
   if (!response.ok) {
@@ -72,6 +85,19 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
       statusCode: response.status,
       code,
     });
+  }
+
+  if (opts.validate) {
+    try {
+      return opts.validate(json);
+    } catch (err) {
+      if (err instanceof CountrError) throw err;
+      throw new CountrError("API response did not match expected shape.", {
+        statusCode: response.status,
+        code: "invalid_response",
+        cause: err,
+      });
+    }
   }
 
   return json as T;

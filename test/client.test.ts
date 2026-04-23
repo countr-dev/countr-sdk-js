@@ -6,14 +6,20 @@ import { CountrError } from "../src/errors.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
+function makeHeaders(contentType = "application/json") {
+  return { get: (name: string) => (name.toLowerCase() === "content-type" ? contentType : null) };
+}
+
 function makeFetch(
   status: number,
   body: unknown,
   ok?: boolean,
+  contentType = "application/json",
 ): typeof globalThis.fetch {
   return vi.fn().mockResolvedValue({
     ok: ok ?? (status >= 200 && status < 300),
     status,
+    headers: makeHeaders(contentType),
     json: () => Promise.resolve(body),
   }) as unknown as typeof globalThis.fetch;
 }
@@ -63,6 +69,7 @@ describe("checkConsume", () => {
     mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
+      headers: makeHeaders(),
       json: () =>
         Promise.resolve({ allowed: true, remaining: 99, reason: null }),
     });
@@ -144,10 +151,11 @@ describe("checkConsume", () => {
     ).rejects.toThrow(CountrError);
   });
 
-  it("throws CountrError for non-2xx response", async () => {
+  it("throws CountrError for non-2xx JSON response", async () => {
     mockFetch.mockResolvedValue({
       ok: false,
       status: 429,
+      headers: makeHeaders(),
       json: () =>
         Promise.resolve({ message: "Rate limit exceeded", code: "rate_limited" }),
     });
@@ -161,16 +169,48 @@ describe("checkConsume", () => {
     });
   });
 
-  it("throws CountrError with default message for non-2xx without body", async () => {
+  it("throws CountrError with default message for non-2xx non-JSON response", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: makeHeaders("text/html"),
+      json: () => Promise.reject(new SyntaxError("not json")),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({
+      name: "CountrError",
+      statusCode: 503,
+      code: "api_error",
+      message: "API request failed with status 503.",
+    });
+  });
+
+  it("throws CountrError with default message for non-2xx empty body", async () => {
     mockFetch.mockResolvedValue({
       ok: false,
       status: 500,
+      headers: makeHeaders(),
       json: () => Promise.resolve(null),
     });
 
     await expect(
       client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
     ).rejects.toMatchObject({ name: "CountrError", statusCode: 500 });
+  });
+
+  it("throws CountrError for invalid response shape", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => Promise.resolve({ unexpected: "shape" }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
   });
 
   it("throws CountrError on network failure", async () => {
@@ -213,6 +253,7 @@ describe("getUsage", () => {
     mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
+      headers: makeHeaders(),
       json: () => Promise.resolve(usageBody),
     });
     client = new CountrClient({
@@ -258,6 +299,7 @@ describe("getUsage", () => {
     mockFetch.mockResolvedValue({
       ok: false,
       status: 404,
+      headers: makeHeaders(),
       json: () =>
         Promise.resolve({ message: "Not found", code: "not_found" }),
     });
@@ -269,6 +311,19 @@ describe("getUsage", () => {
       statusCode: 404,
       code: "not_found",
     });
+  });
+
+  it("throws CountrError for invalid response shape", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => Promise.resolve({ subject: "user_1" }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
   });
 });
 

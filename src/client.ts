@@ -12,6 +12,41 @@ import type {
 
 const DEFAULT_BASE_URL = "https://api.countr.dev";
 
+// ---------------------------------------------------------------------------
+// Runtime response validators
+// ---------------------------------------------------------------------------
+
+function validateCheckConsumeResponse(data: unknown): CheckConsumeResponse {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as Record<string, unknown>).allowed !== "boolean"
+  ) {
+    throw new CountrError(
+      "Unexpected response shape from /v1/check-consume.",
+      { code: "invalid_response" },
+    );
+  }
+  return data as CheckConsumeResponse;
+}
+
+function validateGetUsageResponse(data: unknown): GetUsageResponse {
+  const d = data as Record<string, unknown>;
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof d.subject !== "string" ||
+    typeof d.metric !== "string" ||
+    typeof d.current !== "number"
+  ) {
+    throw new CountrError(
+      "Unexpected response shape from /v1/usage.",
+      { code: "invalid_response" },
+    );
+  }
+  return data as GetUsageResponse;
+}
+
 /**
  * The official Countr API client.
  *
@@ -91,6 +126,7 @@ export class CountrClient {
       headers: extraHeaders,
       signal: options?.signal,
       fetchImpl: this.fetchImpl,
+      validate: validateCheckConsumeResponse,
     });
   }
 
@@ -128,6 +164,7 @@ export class CountrClient {
       apiKey: this.apiKey,
       signal: options?.signal,
       fetchImpl: this.fetchImpl,
+      validate: validateGetUsageResponse,
     });
   }
 
