@@ -79,7 +79,7 @@ export class CountrClient {
   private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(config: CountrClientConfig) {
-    if (!config.apiKey || typeof config.apiKey !== "string") {
+    if (!config.apiKey || typeof config.apiKey !== "string" || !config.apiKey.trim()) {
       throw new CountrError("A valid API key is required.", {
         code: "missing_api_key",
       });
@@ -103,7 +103,7 @@ export class CountrClient {
       }
     }
 
-    this.apiKey = config.apiKey;
+    this.apiKey = config.apiKey.trim();
     this.baseUrl = (config.baseUrl?.trim() ?? DEFAULT_BASE_URL).replace(
       /\/+$/,
       "",

@@ -39,12 +39,20 @@ describe("CountrClient construction", () => {
     ).toThrow(CountrError);
   });
 
+  it("throws if apiKey is whitespace-only", () => {
+    expect(
+      () => new CountrClient({ apiKey: "   ", fetch: makeFetch(200, {}) }),
+    ).toThrow(CountrError);
+  });
+
   it("throws if fetch is unavailable and none is supplied", () => {
     const origFetch = globalThis.fetch;
-    // @ts-expect-error intentionally removing fetch for test
-    delete globalThis.fetch;
-    expect(() => new CountrClient({ apiKey: "ck_test" })).toThrow(CountrError);
-    globalThis.fetch = origFetch;
+    globalThis.fetch = undefined as unknown as typeof globalThis.fetch;
+    try {
+      expect(() => new CountrClient({ apiKey: "ck_test" })).toThrow(CountrError);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 
   it("accepts a custom baseUrl", () => {
