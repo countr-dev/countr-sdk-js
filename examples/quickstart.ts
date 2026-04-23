@@ -40,6 +40,7 @@ const mockFetch: typeof globalThis.fetch = async (input, init) => {
 
   return new Response(JSON.stringify({ message: "Not found" }), {
     status: 404,
+    headers: { "Content-Type": "application/json" },
   });
 };
 
@@ -110,7 +111,7 @@ async function runErrorHandling() {
     fetch: async () =>
       new Response(
         JSON.stringify({ message: "Rate limit exceeded", code: "rate_limited" }),
-        { status: 429 },
+        { status: 429, headers: { "Content-Type": "application/json" } },
       ),
   });
 
