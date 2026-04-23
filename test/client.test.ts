@@ -179,8 +179,8 @@ describe("checkConsume", () => {
     });
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer ck_test");
+    const headers = init.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer ck_test");
   });
 
   it("sends Idempotency-Key when provided", async () => {
@@ -190,8 +190,8 @@ describe("checkConsume", () => {
     );
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Idempotency-Key"]).toBe("idem-123");
+    const headers = init.headers as Headers;
+    expect(headers.get("Idempotency-Key")).toBe("idem-123");
   });
 
   it("does not send Idempotency-Key when not provided", async () => {
@@ -202,8 +202,8 @@ describe("checkConsume", () => {
     });
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Idempotency-Key"]).toBeUndefined();
+    const headers = init.headers as Headers;
+    expect(headers.get("Idempotency-Key")).toBeNull();
   });
 
   it("throws CountrError on invalid input – missing subject", async () => {
@@ -256,8 +256,29 @@ describe("checkConsume", () => {
     );
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Idempotency-Key"]).toBe("idem-abc");
+    const headers = init.headers as Headers;
+    expect(headers.get("Idempotency-Key")).toBe("idem-abc");
+  });
+
+  it("trims subject and metric in the request body", async () => {
+    await client.checkConsume({
+      subject: "  user_1  ",
+      metric: "  api_calls  ",
+      cost: 1,
+    });
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.subject).toBe("user_1");
+    expect(body.metric).toBe("api_calls");
+  });
+
+  it("sets Content-Type on POST and is accessible case-insensitively via Headers object", async () => {
+    await client.checkConsume({ subject: "u", metric: "m", cost: 1 });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    // Headers normalizes header names — get() is case-insensitive
+    expect(headers.get("content-type")).toBe("application/json");
   });
 
   it("throws CountrError on invalid input – negative cost", async () => {
@@ -478,16 +499,26 @@ describe("getUsage", () => {
     await client.getUsage({ subject: "user_1", metric: "api_calls" });
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer ck_test");
+    const headers = init.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer ck_test");
   });
 
   it("does not send Content-Type header on GET requests", async () => {
     await client.getUsage({ subject: "user_1", metric: "api_calls" });
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["Content-Type"]).toBeUndefined();
+    const headers = init.headers as Headers;
+    expect(headers.get("Content-Type")).toBeNull();
+  });
+
+  it("trims subject and metric in query params", async () => {
+    await client.getUsage({ subject: "  user_1  ", metric: "  api_calls  " });
+
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("subject=user_1");
+    expect(url).toContain("metric=api_calls");
+    expect(url).not.toContain("subject=+user_1");
+    expect(url).not.toContain("metric=+api_calls");
   });
 
   it("throws CountrError when 2xx response has non-JSON content type", async () => {

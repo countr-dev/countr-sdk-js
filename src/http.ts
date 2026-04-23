@@ -24,14 +24,19 @@ export interface RequestOptions<T = unknown> {
  * @internal
  */
 export async function request<T>(opts: RequestOptions<T>): Promise<T> {
-  const headers: Record<string, string> = {
+  const headers = new Headers({
     Authorization: `Bearer ${opts.apiKey}`,
     Accept: "application/json",
-    ...opts.headers,
-  };
+  });
 
-  if (opts.body !== undefined && headers["Content-Type"] === undefined) {
-    headers["Content-Type"] = "application/json";
+  if (opts.headers !== undefined) {
+    for (const [key, value] of Object.entries(opts.headers)) {
+      headers.set(key, value);
+    }
+  }
+
+  if (opts.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
   let response: Response;

@@ -156,8 +156,8 @@ export class CountrClient {
       url: `${this.baseUrl}/v1/check-consume`,
       apiKey: this.apiKey,
       body: {
-        subject: input.subject,
-        metric: input.metric,
+        subject: input.subject.trim(),
+        metric: input.metric.trim(),
         cost: input.cost,
       },
       headers: extraHeaders,
@@ -190,10 +190,9 @@ export class CountrClient {
   ): Promise<GetUsageResponse> {
     this.validateGetUsageInput(input);
 
-    const params = new URLSearchParams({
-      subject: input.subject,
-      metric: input.metric,
-    });
+    const subject = input.subject.trim();
+    const metric = input.metric.trim();
+    const params = new URLSearchParams({ subject, metric });
 
     return request<GetUsageResponse>({
       method: "GET",
