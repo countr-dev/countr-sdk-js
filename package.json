@@ -1,0 +1,44 @@
+{
+  "name": "@countr/sdk",
+  "version": "0.1.0",
+  "description": "Official JavaScript/TypeScript SDK for the Countr API",
+  "keywords": ["countr", "sdk", "api", "rate-limiting", "usage"],
+  "homepage": "https://github.com/countr-dev/countr-sdk-js#readme",
+  "bugs": {
+    "url": "https://github.com/countr-dev/countr-sdk-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/countr-dev/countr-sdk-js.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
