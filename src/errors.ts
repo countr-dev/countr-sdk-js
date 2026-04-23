@@ -3,7 +3,7 @@
  *
  * @example
  * ```ts
- * import { CountrError } from "@countr/sdk";
+ * import { CountrError } from "countr-sdk";
  *
  * try {
  *   await client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 });

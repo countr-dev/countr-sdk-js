@@ -1,8 +1,8 @@
-# @countr/sdk
+# countr-sdk
 
 Official JavaScript/TypeScript SDK for [Countr](https://countr.dev) — a usage tracking and rate-limiting API.
 
-[![npm version](https://img.shields.io/npm/v/@countr/sdk)](https://www.npmjs.com/package/@countr/sdk)
+[![npm version](https://img.shields.io/npm/v/countr-sdk)](https://www.npmjs.com/package/countr-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -18,11 +18,11 @@ This SDK is the official JavaScript/TypeScript client for the Countr API. It is 
 ## Installation
 
 ```bash
-npm install @countr/sdk
+npm install countr-sdk
 # or
-pnpm add @countr/sdk
+pnpm add countr-sdk
 # or
-yarn add @countr/sdk
+yarn add countr-sdk
 ```
 
 **Requires Node.js 20.19.0+** (uses the built-in `fetch` API).
@@ -32,7 +32,7 @@ yarn add @countr/sdk
 ## Quickstart
 
 ```ts
-import { CountrClient } from "@countr/sdk";
+import { CountrClient } from "countr-sdk";
 
 const client = new CountrClient({
   apiKey: "ck_usw_live_xxx",
@@ -132,7 +132,7 @@ console.log(`${usage.current} / ${usage.limit ?? "∞"} (${usage.window})`);
 All API and network errors are thrown as `CountrError` instances.
 
 ```ts
-import { CountrClient, CountrError } from "@countr/sdk";
+import { CountrClient, CountrError } from "countr-sdk";
 
 const client = new CountrClient({ apiKey: "ck_usw_live_xxx" });
 
@@ -211,7 +211,7 @@ import type {
   GetUsageInput,
   GetUsageOptions,
   GetUsageResponse,
-} from "@countr/sdk";
+} from "countr-sdk";
 ```
 
 ---
@@ -226,6 +226,20 @@ This SDK is designed for **server-side** use cases:
 - Other serverless runtimes
 
 It relies on `fetch` being available globally (Node.js 20.19.0+) or passed explicitly via `config.fetch`.
+
+---
+
+## Publishing
+
+This package publishes to npm as the unscoped public package `countr-sdk`.
+
+```bash
+npm run build       # compile to dist/ via tsup
+npm pack            # optional — inspect the tarball contents
+npm publish         # publish to npm (no --access flag needed; package is unscoped)
+```
+
+`prepublishOnly` runs the build automatically, so `npm publish` from a clean checkout is sufficient. Only the `dist/` directory (plus `package.json`, `README.md`, and `LICENSE`) is included in the published tarball.
 
 ---
 

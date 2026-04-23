@@ -1,5 +1,5 @@
 /**
- * Quickstart example for @countr/sdk
+ * Quickstart example for countr-sdk
  *
  * This file demonstrates the main SDK features.
  * It uses a custom fetch mock so it can run without a real API key.

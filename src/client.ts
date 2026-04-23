@@ -68,7 +68,7 @@ function validateGetUsageResponse(data: unknown): GetUsageResponse {
  *
  * @example
  * ```ts
- * import { CountrClient } from "@countr/sdk";
+ * import { CountrClient } from "countr-sdk";
  *
  * const client = new CountrClient({ apiKey: "ck_usw_live_xxx" });
  * ```
