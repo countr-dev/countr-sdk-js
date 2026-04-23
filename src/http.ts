@@ -97,7 +97,17 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
     try {
       return opts.validate(json);
     } catch (err) {
-      if (err instanceof CountrError) throw err;
+      if (err instanceof CountrError) {
+        // Enrich with the HTTP status code if the validator didn't set one.
+        if (err.statusCode === undefined) {
+          throw new CountrError(err.message, {
+            statusCode: response.status,
+            code: err.code,
+            cause: err.cause,
+          });
+        }
+        throw err;
+      }
       throw new CountrError("API response did not match expected shape.", {
         statusCode: response.status,
         code: "invalid_response",

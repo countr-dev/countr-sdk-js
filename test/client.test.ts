@@ -55,6 +55,25 @@ describe("CountrClient construction", () => {
     });
     expect(client).toBeInstanceOf(CountrClient);
   });
+
+  it("strips multiple trailing slashes from baseUrl", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ allowed: true, remaining: null, reason: null }),
+    });
+    const client = new CountrClient({
+      apiKey: "ck_test",
+      baseUrl: "http://localhost:3000///",
+      fetch: mockFetch as unknown as typeof globalThis.fetch,
+    });
+    await client.checkConsume({ subject: "user_1", metric: "calls", cost: 1 });
+    const [url] = mockFetch.mock.calls[0] as [string];
+    expect(url).not.toContain("//v1");
+    expect(url).toContain("http://localhost:3000/v1/check-consume");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -260,6 +279,37 @@ describe("checkConsume", () => {
     ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
   });
 
+  it("throws CountrError when `remaining` is NaN", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ allowed: true, remaining: NaN, reason: null }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("includes statusCode from HTTP response when validate throws without one", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => Promise.resolve({ allowed: "yes", remaining: null, reason: null }),
+    });
+
+    await expect(
+      client.checkConsume({ subject: "user_1", metric: "api_calls", cost: 1 }),
+    ).rejects.toMatchObject({
+      name: "CountrError",
+      code: "invalid_response",
+      statusCode: 200,
+    });
+  });
+
   it("throws CountrError on network failure", async () => {
     mockFetch.mockRejectedValue(new Error("Network failure"));
 
@@ -429,6 +479,51 @@ describe("getUsage", () => {
           remaining: 95,
           window: "day",
         }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("includes statusCode from HTTP response when validate throws without one", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => Promise.resolve({ subject: "user_1" }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({
+      name: "CountrError",
+      code: "invalid_response",
+      statusCode: 200,
+    });
+  });
+
+  it("throws CountrError when `current` is NaN", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ ...usageBody, current: NaN }),
+    });
+
+    await expect(
+      client.getUsage({ subject: "user_1", metric: "api_calls" }),
+    ).rejects.toMatchObject({ name: "CountrError", code: "invalid_response" });
+  });
+
+  it("throws CountrError when `remaining` is Infinity", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () =>
+        Promise.resolve({ ...usageBody, remaining: Infinity }),
     });
 
     await expect(

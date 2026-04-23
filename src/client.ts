@@ -17,7 +17,7 @@ const DEFAULT_BASE_URL = "https://api.countr.dev";
 // ---------------------------------------------------------------------------
 
 function isNumberOrNull(v: unknown): v is number | null {
-  return v === null || typeof v === "number";
+  return v === null || (typeof v === "number" && Number.isFinite(v));
 }
 
 function isStringOrNull(v: unknown): v is string | null {
@@ -41,7 +41,7 @@ function validateCheckConsumeResponse(data: unknown): CheckConsumeResponse {
   return data as CheckConsumeResponse;
 }
 
-const VALID_WINDOWS = new Set<unknown>(["none", "day", "month"]);
+const VALID_WINDOWS = new Set<GetUsageResponse["window"]>(["none", "day", "month"]);
 
 function validateGetUsageResponse(data: unknown): GetUsageResponse {
   const r = data as Record<string, unknown>;
@@ -50,10 +50,10 @@ function validateGetUsageResponse(data: unknown): GetUsageResponse {
     data === null ||
     typeof r.subject !== "string" ||
     typeof r.metric !== "string" ||
-    typeof r.current !== "number" ||
+    typeof r.current !== "number" || !Number.isFinite(r.current) ||
     !isNumberOrNull(r.limit) ||
     !isNumberOrNull(r.remaining) ||
-    !VALID_WINDOWS.has(r.window)
+    !VALID_WINDOWS.has(r.window as GetUsageResponse["window"])
   ) {
     throw new CountrError(
       "Unexpected response shape from /v1/usage.",
@@ -95,7 +95,7 @@ export class CountrClient {
     }
 
     this.apiKey = config.apiKey;
-    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.fetchImpl = fetchImpl;
   }
 
