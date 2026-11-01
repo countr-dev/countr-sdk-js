@@ -900,3 +900,181 @@ describe("timeoutMs and failOpen", () => {
     await expect(c.getUsage(input, { timeoutMs: -5 })).rejects.toMatchObject({ code: "invalid_input" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Error body parsing and cost validation
+// ---------------------------------------------------------------------------
+
+describe("error body parsing", () => {
+  const input = { subject: "user_1", metric: "api_calls", cost: 1 };
+  const make = (fetch: typeof globalThis.fetch, extra = {}) =>
+    new CountrClient({ apiKey: "ck_test", fetch, ...extra });
+
+  it("reads the API's nested { error: { code, message } } shape", async () => {
+    const f = makeFetch(401, { error: { code: "unauthorized", message: "Invalid API key" } });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      name: "CountrError",
+      statusCode: 401,
+      code: "unauthorized",
+      message: "Invalid API key",
+    });
+  });
+
+  it("ignores extra nested fields such as details", async () => {
+    const f = makeFetch(400, {
+      error: { code: "validation_error", message: "Invalid request body", details: { cost: "x" } },
+    });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "validation_error",
+      message: "Invalid request body",
+    });
+  });
+
+  it("falls back to the legacy top-level { code, message } shape", async () => {
+    const f = makeFetch(404, { code: "not_found", message: "Nope" });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 404,
+      code: "not_found",
+      message: "Nope",
+    });
+  });
+
+  it("prefers the nested shape when both are present", async () => {
+    const f = makeFetch(400, {
+      code: "old",
+      message: "old message",
+      error: { code: "new", message: "new message" },
+    });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      code: "new",
+      message: "new message",
+    });
+  });
+
+  it("falls back per field (nested code, default message)", async () => {
+    const f = makeFetch(400, { error: { code: "validation_error" } });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "API request failed with status 400.",
+    });
+  });
+
+  it("uses defaults for a non-JSON body", async () => {
+    const f = makeFetch(502, "<html>Bad gateway</html>", false, "text/html");
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 502,
+      code: "api_error",
+      message: "API request failed with status 502.",
+    });
+  });
+
+  it("uses defaults when `error` is not an object or fields are not strings", async () => {
+    for (const body of [{ error: "boom" }, { error: { code: 5, message: null } }, [1, 2], null]) {
+      await expect(make(makeFetch(400, body)).checkConsume(input)).rejects.toMatchObject({
+        code: "api_error",
+        message: "API request failed with status 400.",
+      });
+    }
+  });
+
+  it("parses nested errors from getUsage too (429)", async () => {
+    const f = makeFetch(429, {
+      error: { code: "owner_monthly_limit_exceeded", message: "Monthly request limit exceeded" },
+    });
+    await expect(make(f).getUsage({ subject: "u", metric: "m" })).rejects.toMatchObject({
+      statusCode: 429,
+      code: "owner_monthly_limit_exceeded",
+    });
+  });
+
+  it("503 with the nested shape fails open and keeps the real code on `error`", async () => {
+    const f = makeFetch(503, {
+      error: { code: "service_unavailable", message: "Service temporarily unavailable" },
+    });
+    const result = await make(f, { failOpen: true }).checkConsume(input);
+    expect(result).toMatchObject({ allowed: true, failedOpen: true, reason: "fail_open" });
+    expect(result.error).toMatchObject({
+      statusCode: 503,
+      code: "service_unavailable",
+      message: "Service temporarily unavailable",
+    });
+  });
+
+  it("503 with the nested shape throws when failOpen is not set", async () => {
+    const f = makeFetch(503, { error: { code: "service_unavailable", message: "x" } });
+    await expect(make(f).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 503,
+      code: "service_unavailable",
+    });
+  });
+
+  it("401 with the nested shape never fails open", async () => {
+    const f = makeFetch(401, { error: { code: "unauthorized", message: "Invalid API key" } });
+    await expect(make(f, { failOpen: true }).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 401,
+      code: "unauthorized",
+    });
+    await expect(make(f).checkConsume(input, { failOpen: true })).rejects.toMatchObject({
+      statusCode: 401,
+    });
+  });
+
+  it("does not fail open on a 4xx whose body claims an SDK-style code", async () => {
+    for (const code of ["network_error", "request_timeout"]) {
+      const f = makeFetch(400, { error: { code, message: "server controlled" } });
+      await expect(make(f, { failOpen: true }).checkConsume(input)).rejects.toMatchObject({
+        statusCode: 400,
+        code,
+      });
+    }
+  });
+
+  it("does not fail open on message text that looks like an outage", async () => {
+    const f = makeFetch(400, { error: { code: "validation_error", message: "Service temporarily unavailable" } });
+    await expect(make(f, { failOpen: true }).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 400,
+    });
+  });
+
+  it("fails open on 5xx regardless of the body's code or message", async () => {
+    const f = makeFetch(500, { error: { code: "whatever", message: "anything" } });
+    const result = await make(f, { failOpen: true }).checkConsume(input);
+    expect(result.failedOpen).toBe(true);
+    expect(result.error?.code).toBe("whatever");
+  });
+});
+
+describe("cost validation", () => {
+  const make = () => {
+    const f = makeFetch(200, { allowed: true, remaining: 1, reason: null });
+    return { f, client: new CountrClient({ apiKey: "ck_test", fetch: f, failOpen: true }) };
+  };
+
+  it.each([0, 1.5, -1, -0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "1", null, undefined])(
+    "rejects cost %s before any network call, even with failOpen",
+    async (cost) => {
+      const { f, client } = make();
+      await expect(
+        client.checkConsume({ subject: "u", metric: "m", cost: cost as number }),
+      ).rejects.toMatchObject({ name: "CountrError", code: "invalid_input" });
+      expect(f).not.toHaveBeenCalled();
+    },
+  );
+
+  it("gives a clear message", async () => {
+    const { client } = make();
+    await expect(
+      client.checkConsume({ subject: "u", metric: "m", cost: 0 }),
+    ).rejects.toThrow("`cost` must be a positive integer.");
+  });
+
+  it("accepts cost 1 and larger integers", async () => {
+    for (const cost of [1, 5, 1000]) {
+      const { f, client } = make();
+      const r = await client.checkConsume({ subject: "u", metric: "m", cost });
+      expect(r.allowed).toBe(true);
+      expect(f).toHaveBeenCalledOnce();
+    }
+  });
+});

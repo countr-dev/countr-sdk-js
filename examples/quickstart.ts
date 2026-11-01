@@ -110,7 +110,7 @@ async function runErrorHandling() {
     apiKey: "ck_demo_key",
     fetch: async () =>
       new Response(
-        JSON.stringify({ message: "Invalid API key", code: "unauthorized" }),
+        JSON.stringify({ error: { code: "unauthorized", message: "Invalid API key" } }),
         { status: 401, headers: { "Content-Type": "application/json" } },
       ),
   });

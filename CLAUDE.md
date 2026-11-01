@@ -23,6 +23,11 @@ its docs and `lib/plans/plans.ts` are the source of truth for behaviour and plan
 - Fail-open (`failOpen`, default false) applies only to network errors,
   `request_timeout` and HTTP 5xx. Never 401/4xx/denial/abort/invalid input.
 - `timeoutMs` default 2000. The SDK does not retry.
+- Errors: `http.ts` reads the API's `{error:{code,message}}` (legacy top-level as fallback).
+  Fail-open eligibility uses HTTP status (5xx) or SDK codes when there is no status; never
+  server-supplied `code` or message text.
+- `cost` must be a positive safe integer (checked client-side).
+- Keep `CHANGELOG.md` current with user-visible changes.
 - Failed-open results carry `failedOpen: true` and `error`; real API responses never do.
 
 ## Rules
@@ -36,10 +41,6 @@ its docs and `lib/plans/plans.ts` are the source of truth for behaviour and plan
 - Never change package metadata (other than scripts) without asking.
 
 ## Known gaps / TODO: ask owner
-- TODO: ask owner: API error bodies are `{error:{code,message}}` but `http.ts`
-  reads top-level `message`/`code`, so `CountrError.code` is `api_error` for real
-  API errors. Fixing changes `err.code` values, so confirm first.
-- TODO: ask owner: SDK allows `cost: 0`, but the API requires a positive integer.
 - TODO: ask owner: `package.json` description and keywords wording; npm release steps and CI.
 - TODO: ask owner: no CI config found in this repo.
 - TODO: ask owner: measured latency (none claimed anywhere; add only once measured).

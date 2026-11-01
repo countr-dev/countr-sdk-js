@@ -46,7 +46,7 @@ export interface CheckConsumeInput {
   subject: string;
   /** The metric name to check (e.g. `"api_calls"`). */
   metric: string;
-  /** The cost of this operation (a positive integer; the API rejects 0 and non-integers). */
+  /** The cost of this operation (a positive integer; 0, negative and non-integer values are rejected with `invalid_input`). */
   cost: number;
 }
 

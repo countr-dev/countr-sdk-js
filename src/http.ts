@@ -3,6 +3,35 @@ import { CountrError } from "./errors.js";
 /** Largest delay `setTimeout` supports (2^31 - 1 ms). */
 const MAX_TIMER_MS = 2_147_483_647;
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Extracts `code` and `message` from an error response body.
+ * Prefers the API's shape `{ error: { code, message } }`, falls back to the
+ * legacy top-level `{ code, message }`, then to generic defaults (e.g. for
+ * non-JSON or empty bodies). Each field falls back independently.
+ */
+function parseErrorBody(
+  json: unknown,
+  status: number,
+): { message: string; code: string } {
+  const nested = isRecord(json) && isRecord(json.error) ? json.error : undefined;
+  const top = isRecord(json) ? json : undefined;
+  const pick = (key: "code" | "message"): string | undefined => {
+    for (const src of [nested, top]) {
+      const v = src?.[key];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+    return undefined;
+  };
+  return {
+    message: pick("message") ?? `API request failed with status ${status}.`,
+    code: pick("code") ?? "api_error",
+  };
+}
+
 /** @internal */
 export interface RequestOptions<T = unknown> {
   method: "GET" | "POST";
@@ -149,13 +178,7 @@ export async function request<T>(opts: RequestOptions<T>): Promise<T> {
     }
 
     if (!response.ok) {
-      const body = json as Record<string, unknown> | null;
-      const message =
-        typeof body?.message === "string"
-          ? body.message
-          : `API request failed with status ${response.status}.`;
-      const code =
-        typeof body?.code === "string" ? body.code : "api_error";
+      const { message, code } = parseErrorBody(json, response.status);
       throw new CountrError(message, {
         statusCode: response.status,
         code,

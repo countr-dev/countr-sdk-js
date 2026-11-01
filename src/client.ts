@@ -27,12 +27,15 @@ function validateFailOpen(v: unknown, where: string, code: string): void {
 
 /**
  * True only for failures that mean "Countr is unreachable or broken":
- * network errors, timeouts and HTTP 5xx. Never true for 401/4xx, successful
- * responses with bad shapes, or caller aborts.
+ * HTTP 5xx, or SDK-generated network errors and timeouts (which carry no
+ * status code). Never relies on message text, and never on `code` when an HTTP
+ * status exists, because the API controls `code` in error bodies.
  */
 function isFailOpenEligible(err: CountrError): boolean {
-  if (err.code === "network_error" || err.code === "request_timeout") return true;
-  return err.statusCode !== undefined && err.statusCode >= 500 && err.statusCode <= 599;
+  if (err.statusCode !== undefined) {
+    return err.statusCode >= 500 && err.statusCode <= 599;
+  }
+  return err.code === "network_error" || err.code === "request_timeout";
 }
 
 // ---------------------------------------------------------------------------
@@ -282,8 +285,8 @@ export class CountrClient {
         code: "invalid_input",
       });
     }
-    if (typeof input.cost !== "number" || input.cost < 0 || !isFinite(input.cost)) {
-      throw new CountrError("`cost` must be a non-negative finite number.", {
+    if (!Number.isSafeInteger(input.cost) || input.cost <= 0) {
+      throw new CountrError("`cost` must be a positive integer.", {
         code: "invalid_input",
       });
     }
