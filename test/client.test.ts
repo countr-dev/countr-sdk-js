@@ -706,3 +706,197 @@ describe("CountrError", () => {
     expect(err.cause).toBe(cause);
   });
 });
+
+// ---------------------------------------------------------------------------
+// timeoutMs and failOpen
+// ---------------------------------------------------------------------------
+
+describe("timeoutMs and failOpen", () => {
+  const input = { subject: "user_1", metric: "api_calls", cost: 1 };
+  const okBody = { allowed: true, remaining: 9, reason: null };
+  const denyBody = { allowed: false, remaining: 0, reason: "limit_exceeded" };
+
+  /** Never resolves and ignores the abort signal (worst-case custom fetch). */
+  const hangingFetch = () =>
+    vi.fn().mockImplementation(() => new Promise(() => {})) as unknown as typeof globalThis.fetch;
+
+  const make = (fetch: typeof globalThis.fetch, extra = {}) =>
+    new CountrClient({ apiKey: "ck_test", fetch, ...extra });
+
+  it("returns a normal allow without failedOpen", async () => {
+    const result = await make(makeFetch(200, okBody), { failOpen: true }).checkConsume(input);
+    expect(result).toEqual(okBody);
+    expect(result.failedOpen).toBeUndefined();
+  });
+
+  it("returns an explicit denial as-is, even with failOpen", async () => {
+    const result = await make(makeFetch(200, denyBody), { failOpen: true }).checkConsume(input);
+    expect(result.allowed).toBe(false);
+    expect(result.failedOpen).toBeUndefined();
+  });
+
+  it("passes a timeout signal to fetch by default", async () => {
+    const f = makeFetch(200, okBody);
+    await make(f).checkConsume(input);
+    const [, init] = (f as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("times out without failOpen: throws request_timeout", async () => {
+    await expect(
+      make(hangingFetch(), { timeoutMs: 20 }).checkConsume(input),
+    ).rejects.toMatchObject({ name: "CountrError", code: "request_timeout" });
+  });
+
+  it("times out with failOpen: resolves with failedOpen result", async () => {
+    const result = await make(hangingFetch(), { timeoutMs: 20, failOpen: true }).checkConsume(input);
+    expect(result).toMatchObject({
+      allowed: true,
+      remaining: null,
+      reason: "fail_open",
+      failedOpen: true,
+    });
+    expect(result.error?.code).toBe("request_timeout");
+  });
+
+  it("times out when the response body hangs", async () => {
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => new Promise(() => {}),
+    }) as unknown as typeof globalThis.fetch;
+    await expect(make(f, { timeoutMs: 20 }).checkConsume(input)).rejects.toMatchObject({
+      code: "request_timeout",
+    });
+  });
+
+  it("per-call timeoutMs overrides the client default", async () => {
+    const client = make(hangingFetch(), { timeoutMs: 60_000 });
+    await expect(client.checkConsume(input, { timeoutMs: 20 })).rejects.toMatchObject({
+      code: "request_timeout",
+    });
+  });
+
+  it("fails closed by default on network error", async () => {
+    await expect(
+      make(makeFailingFetch(new Error("ECONNRESET"))).checkConsume(input),
+    ).rejects.toMatchObject({ code: "network_error" });
+  });
+
+  it("fails open on network error when enabled", async () => {
+    const result = await make(makeFailingFetch(new Error("ECONNRESET")), {
+      failOpen: true,
+    }).checkConsume(input);
+    expect(result.failedOpen).toBe(true);
+    expect(result.error?.code).toBe("network_error");
+  });
+
+  it.each([500, 502, 503])("5xx (%i) without failOpen throws", async (status) => {
+    await expect(
+      make(makeFetch(status, { error: { code: "service_unavailable" } })).checkConsume(input),
+    ).rejects.toMatchObject({ statusCode: status });
+  });
+
+  it.each([500, 502, 503])("5xx (%i) with failOpen resolves failedOpen", async (status) => {
+    const result = await make(makeFetch(status, {}), { failOpen: true }).checkConsume(input);
+    expect(result).toMatchObject({ allowed: true, failedOpen: true });
+    expect(result.error?.statusCode).toBe(status);
+  });
+
+  it("5xx with non-JSON body still fails open", async () => {
+    const f = makeFetch(503, "<html>", false, "text/html");
+    const result = await make(f, { failOpen: true }).checkConsume(input);
+    expect(result.failedOpen).toBe(true);
+  });
+
+  it("never fails open on 401", async () => {
+    const f = makeFetch(401, { error: { code: "unauthorized" } });
+    await expect(make(f, { failOpen: true }).checkConsume(input)).rejects.toMatchObject({
+      statusCode: 401,
+    });
+    await expect(
+      make(f).checkConsume(input, { failOpen: true }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it.each([400, 403, 404, 429])("never fails open on %i", async (status) => {
+    await expect(
+      make(makeFetch(status, {}), { failOpen: true }).checkConsume(input),
+    ).rejects.toMatchObject({ statusCode: status });
+  });
+
+  it("never fails open on a malformed 2xx response", async () => {
+    await expect(
+      make(makeFetch(200, { nope: 1 }), { failOpen: true }).checkConsume(input),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  it("never fails open on invalid input", async () => {
+    await expect(
+      make(makeFetch(200, okBody), { failOpen: true }).checkConsume({ ...input, subject: "" }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+  });
+
+  it("never fails open when the caller aborts", async () => {
+    const controller = new AbortController();
+    const f = vi.fn().mockImplementation(
+      (_u: string, init: RequestInit) =>
+        new Promise((_, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            const e = new Error("aborted");
+            e.name = "AbortError";
+            reject(e);
+          });
+        }),
+    ) as unknown as typeof globalThis.fetch;
+    const p = make(f, { failOpen: true }).checkConsume(input, { signal: controller.signal });
+    controller.abort();
+    await expect(p).rejects.toMatchObject({ code: "request_aborted" });
+  });
+
+  it("per-call failOpen:true beats client failOpen:false", async () => {
+    const result = await make(makeFetch(503, {}), { failOpen: false }).checkConsume(input, {
+      failOpen: true,
+    });
+    expect(result.failedOpen).toBe(true);
+  });
+
+  it("per-call failOpen:false beats client failOpen:true", async () => {
+    await expect(
+      make(makeFetch(503, {}), { failOpen: true }).checkConsume(input, { failOpen: false }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+  });
+
+  it("sends the same Idempotency-Key on a manual retry after fail-open", async () => {
+    const f = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: makeHeaders(),
+      json: () => Promise.resolve(okBody),
+    });
+    const client = make(f as unknown as typeof globalThis.fetch, { failOpen: true });
+    const first = await client.checkConsume(input, { idempotencyKey: "k-1" });
+    expect(first.failedOpen).toBe(true);
+    await client.checkConsume(input, { idempotencyKey: "k-1" });
+    for (const call of f.mock.calls as [string, RequestInit][]) {
+      expect((call[1].headers as Headers).get("Idempotency-Key")).toBe("k-1");
+    }
+  });
+
+  it("rejects invalid timeoutMs and failOpen config values", () => {
+    for (const timeoutMs of [0, -1, NaN, Infinity, "2000" as unknown as number]) {
+      expect(() => make(makeFetch(200, okBody), { timeoutMs })).toThrow(CountrError);
+    }
+    expect(() => make(makeFetch(200, okBody), { failOpen: "yes" })).toThrow(CountrError);
+  });
+
+  it("rejects invalid per-call options", async () => {
+    const c = make(makeFetch(200, okBody));
+    await expect(c.checkConsume(input, { timeoutMs: 0 })).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      c.checkConsume(input, { failOpen: 1 as unknown as boolean }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(c.getUsage(input, { timeoutMs: -5 })).rejects.toMatchObject({ code: "invalid_input" });
+  });
+});

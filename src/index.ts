@@ -5,7 +5,7 @@
  * ```ts
  * import { CountrClient } from "countr-sdk";
  *
- * const client = new CountrClient({ apiKey: "ck_usw_live_xxx" });
+ * const client = new CountrClient({ apiKey: "ck_test_xxx" });
  *
  * const result = await client.checkConsume({
  *   subject: "user_abc",
