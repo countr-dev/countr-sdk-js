@@ -1,8 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
-
-Not yet published. Version in `package.json` is still 0.1.0.
+## 0.2.0
 
 ### Added
 - `timeoutMs` option (client and per call). Default **2000** ms. A timeout
