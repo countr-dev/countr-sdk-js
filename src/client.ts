@@ -11,6 +11,32 @@ import type {
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.countr.dev";
+const DEFAULT_TIMEOUT_MS = 2000;
+
+function validateTimeout(v: unknown, where: string, code: string): void {
+  if (v !== undefined && (typeof v !== "number" || !Number.isFinite(v) || v <= 0)) {
+    throw new CountrError(`${where} must be a positive finite number.`, { code });
+  }
+}
+
+function validateFailOpen(v: unknown, where: string, code: string): void {
+  if (v !== undefined && typeof v !== "boolean") {
+    throw new CountrError(`${where} must be a boolean.`, { code });
+  }
+}
+
+/**
+ * True only for failures that mean "Countr is unreachable or broken":
+ * HTTP 5xx, or SDK-generated network errors and timeouts (which carry no
+ * status code). Never relies on message text, and never on `code` when an HTTP
+ * status exists, because the API controls `code` in error bodies.
+ */
+function isFailOpenEligible(err: CountrError): boolean {
+  if (err.statusCode !== undefined) {
+    return err.statusCode >= 500 && err.statusCode <= 599;
+  }
+  return err.code === "network_error" || err.code === "request_timeout";
+}
 
 // ---------------------------------------------------------------------------
 // Runtime response validators
@@ -70,13 +96,15 @@ function validateGetUsageResponse(data: unknown): GetUsageResponse {
  * ```ts
  * import { CountrClient } from "countr-sdk";
  *
- * const client = new CountrClient({ apiKey: "ck_usw_live_xxx" });
+ * const client = new CountrClient({ apiKey: "ck_test_xxx" });
  * ```
  */
 export class CountrClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly timeoutMs: number;
+  private readonly failOpen: boolean;
 
   constructor(config: CountrClientConfig) {
     if (!config.apiKey || typeof config.apiKey !== "string" || !config.apiKey.trim()) {
@@ -102,6 +130,11 @@ export class CountrClient {
         );
       }
     }
+
+    validateTimeout(config.timeoutMs, "config.timeoutMs", "invalid_config");
+    validateFailOpen(config.failOpen, "config.failOpen", "invalid_config");
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.failOpen = config.failOpen ?? false;
 
     this.apiKey = config.apiKey.trim();
     this.baseUrl = (config.baseUrl?.trim() ?? DEFAULT_BASE_URL).replace(
@@ -151,20 +184,38 @@ export class CountrClient {
       extraHeaders["Idempotency-Key"] = options.idempotencyKey.trim();
     }
 
-    return request<CheckConsumeResponse>({
-      method: "POST",
-      url: `${this.baseUrl}/v1/check-consume`,
-      apiKey: this.apiKey,
-      body: {
-        subject: input.subject.trim(),
-        metric: input.metric.trim(),
-        cost: input.cost,
-      },
-      headers: extraHeaders,
-      signal: options?.signal,
-      fetchImpl: this.fetchImpl,
-      validate: validateCheckConsumeResponse,
-    });
+    validateTimeout(options?.timeoutMs, "`timeoutMs`", "invalid_input");
+    validateFailOpen(options?.failOpen, "`failOpen`", "invalid_input");
+    const failOpen = options?.failOpen ?? this.failOpen;
+
+    try {
+      return await request<CheckConsumeResponse>({
+        method: "POST",
+        url: `${this.baseUrl}/v1/check-consume`,
+        apiKey: this.apiKey,
+        body: {
+          subject: input.subject.trim(),
+          metric: input.metric.trim(),
+          cost: input.cost,
+        },
+        headers: extraHeaders,
+        signal: options?.signal,
+        timeoutMs: options?.timeoutMs ?? this.timeoutMs,
+        fetchImpl: this.fetchImpl,
+        validate: validateCheckConsumeResponse,
+      });
+    } catch (err) {
+      if (failOpen && err instanceof CountrError && isFailOpenEligible(err)) {
+        return {
+          allowed: true,
+          remaining: null,
+          reason: "fail_open",
+          failedOpen: true,
+          error: err,
+        };
+      }
+      throw err;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -189,6 +240,7 @@ export class CountrClient {
     options?: GetUsageOptions,
   ): Promise<GetUsageResponse> {
     this.validateGetUsageInput(input);
+    validateTimeout(options?.timeoutMs, "`timeoutMs`", "invalid_input");
 
     const subject = input.subject.trim();
     const metric = input.metric.trim();
@@ -199,6 +251,7 @@ export class CountrClient {
       url: `${this.baseUrl}/v1/usage?${params.toString()}`,
       apiKey: this.apiKey,
       signal: options?.signal,
+      timeoutMs: options?.timeoutMs ?? this.timeoutMs,
       fetchImpl: this.fetchImpl,
       validate: validateGetUsageResponse,
     });
@@ -232,8 +285,8 @@ export class CountrClient {
         code: "invalid_input",
       });
     }
-    if (typeof input.cost !== "number" || input.cost < 0 || !isFinite(input.cost)) {
-      throw new CountrError("`cost` must be a non-negative finite number.", {
+    if (!Number.isSafeInteger(input.cost) || input.cost <= 0) {
+      throw new CountrError("`cost` must be a positive integer.", {
         code: "invalid_input",
       });
     }

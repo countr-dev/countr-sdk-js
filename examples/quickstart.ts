@@ -5,7 +5,7 @@
  * It uses a custom fetch mock so it can run without a real API key.
  *
  * To run against the real API:
- *   export COUNTR_API_KEY=ck_usw_live_xxx
+ *   export COUNTR_API_KEY=ck_test_xxx
  *   npx tsx examples/quickstart.ts
  */
 
@@ -110,8 +110,8 @@ async function runErrorHandling() {
     apiKey: "ck_demo_key",
     fetch: async () =>
       new Response(
-        JSON.stringify({ message: "Rate limit exceeded", code: "rate_limited" }),
-        { status: 429, headers: { "Content-Type": "application/json" } },
+        JSON.stringify({ error: { code: "unauthorized", message: "Invalid API key" } }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
       ),
   });
 
@@ -132,6 +132,32 @@ async function runErrorHandling() {
 }
 
 // ---------------------------------------------------------------------------
+// Fail-open example
+// ---------------------------------------------------------------------------
+async function runFailOpen() {
+  console.log("\n--- fail open ---");
+
+  const downClient = new CountrClient({
+    apiKey: "ck_demo_key",
+    failOpen: true,
+    timeoutMs: 2000,
+    fetch: async () => {
+      throw new Error("simulated outage");
+    },
+  });
+
+  const result = await downClient.checkConsume({
+    subject: "user_abc",
+    metric: "api_calls",
+    cost: 1,
+  });
+
+  console.log("allowed:", result.allowed);
+  console.log("failedOpen:", result.failedOpen);
+  console.log("error code:", result.error?.code);
+}
+
+// ---------------------------------------------------------------------------
 // Run all examples
 // ---------------------------------------------------------------------------
 (async () => {
@@ -140,6 +166,7 @@ async function runErrorHandling() {
     await runCheckConsumeIdempotent();
     await runGetUsage();
     await runErrorHandling();
+    await runFailOpen();
     console.log("\n✓ All examples completed successfully.");
   } catch (err) {
     console.error("Unexpected error:", err);

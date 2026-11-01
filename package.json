@@ -1,6 +1,6 @@
 {
   "name": "countr-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Official JavaScript/TypeScript SDK for the Countr API",
   "keywords": ["countr", "sdk", "api", "rate-limiting", "usage"],
   "homepage": "https://github.com/countr-dev/countr-sdk-js#readme",
